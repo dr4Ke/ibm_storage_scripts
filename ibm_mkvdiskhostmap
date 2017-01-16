@@ -4,7 +4,7 @@
 # Author:      Christophe Drevet-Droguet
 
 typeset PROG="$(basename "$0")"
-typeset VERSION="0.1"
+typeset VERSION="0.2"
 
 typeset _host
 typeset _dev="$1"
