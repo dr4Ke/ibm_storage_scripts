@@ -9,48 +9,86 @@ typeset VERSION="dev"
 typeset _host
 typeset _dev="$1"
 typeset _hosts="$2"
-typeset _vdisk="$3"
-typeset _scsiid="$4"
+typeset _vdisk_pattern="$3"
+shift 3
+typeset -a _scsiids
+typeset -i i
+typeset -i imax=$#
+for (( i=0; i<${imax}; i++ )); do
+    _scsiids[$i]="$1"
+    shift
+done
 
-if [ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk}" ]; then
+if [ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk_pattern}" ]; then
     echo "${PROG} version ${VERSION}"
-    echo "usage: ${PROG} DEVICE HOSTS_PATTERN VDISK_NAME [SCSI_ID]"
+    echo "usage: ${PROG} DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID1 ...]"
     exit 2
 fi
 
-typeset _f1 _f2 _id _f3 _f4 _vname _f6
-typeset _maxid=0
-typeset _vdiskok=0
+function map_vdisk_to_host {
+    local _f1 _f2 _id _f3 _f4 _vname _f6
+    local _maxid=0
+    local _vdiskok=0
+    local _vdisk="$1"
+    local _scsiid="$2"
 
-# Check SCSI ID in use, and get the next available
-while read _f1 _f2 _id _f4 _vname _f6; do
-    [ "${_f1}" = "id" ] && continue
-    if [ "${_id}" = "${_scsiid}" -a "${_vname}" != "${_vdisk}" ]; then
-        echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname}"
+    # Check SCSI ID in use, and get the next available
+    while read _f1 _f2 _id _f4 _vname _f6; do
+        [ "${_f1}" = "id" ] && continue
+        if [ "${_id}" = "${_scsiid}" -a "${_vname}" != "${_vdisk}" ]; then
+            echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname}"
+            exit 1
+        fi
+        [ "${_id}" -ge "${_maxid}" ] && _maxid=$((_maxid + 1))
+    done < <(ssh -n "${_dev}" lshostvdiskmap)
+
+    # Check vDisk existence
+    while read _f1 _vname _f3; do
+        [ "${_vname}" = "${_vdisk}" ] && _vdiskok=1
+    done < <(ssh -n "${_dev}" lsvdisk)
+
+    if [ "${_vdiskok}" != "1" ]; then
+        echo "ERROR: inexistent vDisk '${_vdisk}'"
         exit 1
     fi
-    [ "${_id}" -ge "${_maxid}" ] && _maxid=$((_maxid + 1))
-done < <(ssh -n "${_dev}" lshostvdiskmap)
 
-# Check vDisk existence
-while read _f1 _vname _f3; do
-    [ "${_vname}" = "${_vdisk}" ] && _vdiskok=1
-done < <(ssh -n "${_dev}" lsvdisk)
+    local _scsi
+    if [ -z "${_scsiid}" ]; then
+        echo "INFO: Using ${_maxid} as SCSI ID for ${_vdisk}"
+        _scsi="-scsi ${_maxid}"
+    else
+        _scsi="-scsi ${_scsiid}"
+    fi
 
-if [ "${_vdiskok}" != "1" ]; then
-    echo "ERROR: inexistent vDisk '${_vdisk}'"
+    while read _host; do
+        echo -n "${_host}: "
+        ssh -n "${_dev}" mkvdiskhostmap -force -host ${_host} ${_scsi} ${_vdisk}
+    done < <(ssh "${_dev}" lshost -delim : | cut -d: -f2 | grep -P "${_hosts}")
+}
+
+typeset -a _vdisks
+i=0
+while read _vdisk; do
+    _vdisks[$i]="${_vdisk}"
+    i=i+1
+done < <(ssh -n "${_dev}" lsvdisk -delim : | cut -d: -f2 | grep -P "${_vdisk_pattern}")
+
+if [ "${#_vdisks[@]}" = "0" ]; then
+    echo "ERROR: no vDisk found with this pattern: ${_vdisk_pattern}"
     exit 1
 fi
 
-typeset _scsi
-if [ -z "${_scsiid}" ]; then
-    echo "INFO: Using ${_maxid} as SCSI ID"
-    _scsi="-scsi ${_maxid}"
-else
-    _scsi="-scsi ${_scsiid}"
+if [ "${#_scsiids[@]}" -gt "0" -a "${#_scsiids[@]}" -lt "${#_vdisks[@]}" ]; then
+    echo "ERROR: not enough SCSI ids specified: ${#_scsiids[@]} for ${#_vdisks[@]} vDisks"
+    exit 1
 fi
 
-while read _host; do
-    echo -n "${_host}: "
-    ssh -n "${_dev}" mkvdiskhostmap -force -host ${_host} ${_scsi} ${_vdisk}
-done < <(ssh "${_dev}" lshost -delim : | cut -d: -f2 | grep -P "${_hosts}")
+i=0
+for _vdisk in "${_vdisks[@]}"; do
+    if [ "${#_scsiids[@]}" = "0" ]; then
+        map_vdisk_to_host "${_vdisk}"
+    else
+        map_vdisk_to_host "${_vdisk}" "${_scsiids[$i]}"
+    fi
+    i=i+1
+done
