@@ -7,21 +7,43 @@ typeset PROG="$(basename "$0")"
 typeset VERSION="dev"
 
 typeset _host
-typeset _dev="$1"
-typeset _hosts="$2"
-typeset _vdisk_pattern="$3"
-shift 3
+typeset _dev=
+typeset _hosts=
+typeset _vdisk_pattern=
+typeset _noaction=0
 typeset -a _scsiids
 typeset -i i
 typeset -i imax=$#
+
 for (( i=0; i<${imax}; i++ )); do
-    _scsiids[$i]="$1"
+    if [ "$1" = "-n" ]; then
+        _noaction=1
+    elif [ -z "${_dev}" ]; then
+        _dev="$1"
+    elif [ -z "${_hosts}" ]; then
+        _hosts="$1"
+    elif [ -z "${_vdisk_pattern}" ]; then
+        _vdisk_pattern="$1"
+    else
+        _scsiids[${#_scsiids[@]}]="$1"
+    fi
     shift
 done
 
 if [ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk_pattern}" ]; then
     echo "${PROG} version ${VERSION}"
-    echo "usage: ${PROG} DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID1 ...]"
+    echo "usage: ${PROG} [-n] DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID ...]"
+    echo ""
+    echo "  OPTIONS:"
+    echo "    -n: no action, just show what would be done."
+    echo ""
+    echo "  PARAMETERS:"
+    echo "    DEVICE:        Hostname of the storage cluster"
+    echo "    HOSTS_PATTERN: Regular expression to select hosts to map (used"
+    echo "                   with 'grep -P')"
+    echo "    VDISK_PATTERN: Regular expression to select vdisks to map"
+    echo "    SCSI_ID:       Force the use of this SCSI ID. There must be"
+    echo "                   an ID for each selected vdisk"
     exit 2
 fi
 
@@ -55,14 +77,18 @@ function map_vdisk_to_host {
     local _scsi
     if [ -z "${_scsiid}" ]; then
         echo "INFO: Using ${_maxid} as SCSI ID for ${_vdisk}"
-        _scsi="-scsi ${_maxid}"
+        _scsi="${_maxid}"
     else
-        _scsi="-scsi ${_scsiid}"
+        _scsi="${_scsiid}"
     fi
 
     while read _host; do
         echo -n "${_host}: "
-        ssh -n "${_dev}" mkvdiskhostmap -force -host ${_host} ${_scsi} ${_vdisk}
+        if [ "${_noaction}" = "0" ]; then
+            ssh -n "${_dev}" mkvdiskhostmap -force -host ${_host} -scsi ${_scsi} ${_vdisk}
+        else
+            echo "Would map vdisk '${_vdisk}' to host '${_host}' with id '${_scsi}'"
+        fi
     done < <(ssh "${_dev}" lshost -delim : | cut -d: -f2 | grep -P "${_hosts}")
 }
 
