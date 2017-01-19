@@ -18,21 +18,24 @@ if [ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk}" ]; then
     exit 2
 fi
 
-typeset _f1 _f2 _id _f4 _vname _f6
+typeset _f1 _f2 _id _f3 _f4 _vname _f6
 typeset _maxid=0
 typeset _vdiskok=0
 
 # Check SCSI ID in use, and get the next available
-# Check vDisk existence
 while read _f1 _f2 _id _f4 _vname _f6; do
     [ "${_f1}" = "id" ] && continue
     if [ "${_id}" = "${_scsiid}" ]; then
         echo "ERROR: SCSI ID already in use: ${_scsiid}"
         exit 1
     fi
-    [ "${_vname}" = "${_vdisk}" ] && _vdiskok=1
     [ "${_id}" -ge "${_maxid}" ] && _maxid=$((_maxid + 1))
 done < <(ssh -n "${_dev}" lshostvdiskmap)
+
+# Check vDisk existence
+while read _f1 _vname _f3; do
+    [ "${_vname}" = "${_vdisk}" ] && _vdiskok=1
+done < <(ssh -n "${_dev}" lsvdisk)
 
 if [ "${_vdiskok}" != "1" ]; then
     echo "ERROR: inexistent vDisk '${_vdisk}'"
