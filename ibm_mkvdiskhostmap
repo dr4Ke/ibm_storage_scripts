@@ -25,8 +25,8 @@ typeset _vdiskok=0
 # Check SCSI ID in use, and get the next available
 while read _f1 _f2 _id _f4 _vname _f6; do
     [ "${_f1}" = "id" ] && continue
-    if [ "${_id}" = "${_scsiid}" ]; then
-        echo "ERROR: SCSI ID already in use: ${_scsiid}"
+    if [ "${_id}" = "${_scsiid}" -a "${_vname}" != "${_vdisk}" ]; then
+        echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname}"
         exit 1
     fi
     [ "${_id}" -ge "${_maxid}" ] && _maxid=$((_maxid + 1))
