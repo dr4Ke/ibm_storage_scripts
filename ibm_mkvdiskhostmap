@@ -53,4 +53,4 @@ fi
 while read _host; do
     echo -n "${_host}: "
     ssh -n "${_dev}" mkvdiskhostmap -force -host ${_host} ${_scsi} ${_vdisk}
-done < <(ssh "${_dev}" lshost -delim : | cut -d: -f2 | grep "${_hosts}")
+done < <(ssh "${_dev}" lshost -delim : | cut -d: -f2 | grep -P "${_hosts}")
