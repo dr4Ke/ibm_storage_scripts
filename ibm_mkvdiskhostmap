@@ -43,7 +43,8 @@ if [ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk_pattern}" ]; then
     echo "                   with 'grep -P')"
     echo "    VDISK_PATTERN: Regular expression to select vdisks to map"
     echo "    SCSI_ID:       Force the use of this SCSI ID. There must be"
-    echo "                   an ID for each selected vdisk"
+    echo "                   an ID for each selected vdisk. If there is not"
+    echo "                   enough IDs, the default policy is used: last + 1"
     exit 2
 fi
 
@@ -104,14 +105,9 @@ if [ "${#_vdisks[@]}" = "0" ]; then
     exit 1
 fi
 
-if [ "${#_scsiids[@]}" -gt "0" -a "${#_scsiids[@]}" -lt "${#_vdisks[@]}" ]; then
-    echo "ERROR: not enough SCSI ids specified: ${#_scsiids[@]} for ${#_vdisks[@]} vDisks"
-    exit 1
-fi
-
 i=0
 for _vdisk in "${_vdisks[@]}"; do
-    if [ "${#_scsiids[@]}" = "0" ]; then
+    if [ -z "${_scsiids[$i]}" ]; then
         map_vdisk_to_host "${_vdisk}"
     else
         map_vdisk_to_host "${_vdisk}" "${_scsiids[$i]}"
