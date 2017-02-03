@@ -65,7 +65,7 @@ function map_vdisk_to_host {
             echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname}"
             exit 1
         fi
-        [ "${_id}" -ge "${_maxid}" ] && _maxid=$((_maxid + 1))
+        [ "${_id}" -ge "${_maxid}" ] && _maxid=$((_id + 1))
     done < <(ssh -n "${_dev}" lshostvdiskmap)
 
     # Check vDisk existence
