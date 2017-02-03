@@ -58,6 +58,9 @@ function map_vdisk_to_host {
     # Check SCSI ID in use, and get the next available
     while read _f1 _f2 _id _f4 _vname _f6; do
         [ "${_f1}" = "id" ] && continue
+        if [ -z "${_scsiid}" -a "${_vname}" = "${_vdisk}" ]; then
+            _scsiid="${_id}"
+        fi
         if [ "${_id}" = "${_scsiid}" -a "${_vname}" != "${_vdisk}" ]; then
             echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname}"
             exit 1
@@ -75,20 +78,15 @@ function map_vdisk_to_host {
         exit 1
     fi
 
-    local _scsi
-    if [ -z "${_scsiid}" ]; then
-        echo "INFO: Using ${_maxid} as SCSI ID for ${_vdisk}"
-        _scsi="${_maxid}"
-    else
-        _scsi="${_scsiid}"
-    fi
+    [ -z "${_scsiid}" ] && _scsiid="${_maxid}"
+    echo "INFO: Using ${_scsiid} as SCSI ID for ${_vdisk}"
 
     while read _host; do
         echo -n "${_host}: "
         if [ "${_noaction}" = "0" ]; then
-            ssh -n "${_dev}" mkvdiskhostmap -force -host ${_host} -scsi ${_scsi} ${_vdisk}
+            ssh -n "${_dev}" mkvdiskhostmap -force -host ${_host} -scsi ${_scsiid} ${_vdisk}
         else
-            echo "Would map vdisk '${_vdisk}' to host '${_host}' with id '${_scsi}'"
+            echo "Would map vdisk '${_vdisk}' to host '${_host}' with id '${_scsiid}'"
         fi
     done < <(ssh "${_dev}" lshost -delim : | cut -d: -f2 | grep -P "${_hosts}")
 }
