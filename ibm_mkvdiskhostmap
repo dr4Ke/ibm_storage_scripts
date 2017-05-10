@@ -11,6 +11,7 @@ typeset _dev=
 typeset _hosts=
 typeset _vdisk_pattern=
 typeset _noaction=0
+typeset _xhostid=0
 typeset -a _scsiids
 typeset -i i
 typeset -i imax=$#
@@ -18,6 +19,8 @@ typeset -i imax=$#
 for (( i=0; i<${imax}; i++ )); do
     if [ "$1" = "-n" ]; then
         _noaction=1
+    elif [ "$1" = "-x" ]; then
+        _xhostid=1
     elif [ -z "${_dev}" ]; then
         _dev="$1"
     elif [ -z "${_hosts}" ]; then
@@ -32,10 +35,11 @@ done
 
 if [ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk_pattern}" ]; then
     echo "${PROG} version ${VERSION}"
-    echo "usage: ${PROG} [-n] DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID ...]"
+    echo "usage: ${PROG} [-n] [-x] DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID ...]"
     echo ""
     echo "  OPTIONS:"
     echo "    -n: no action, just show what would be done."
+    echo "    -x: don't abort if scsi id is used in other hosts."
     echo ""
     echo "  PARAMETERS:"
     echo "    DEVICE:        Hostname of the storage cluster"
@@ -56,14 +60,16 @@ function map_vdisk_to_host {
     local _scsiid="$2"
 
     # Check SCSI ID in use, and get the next available
-    while read _f1 _f2 _id _f4 _vname _f6; do
+    while read _f1 _f2_host _id _f4 _vname _f6; do
         [ "${_f1}" = "id" ] && continue
         if [ -z "${_scsiid}" -a "${_vname}" = "${_vdisk}" ]; then
             _scsiid="${_id}"
         fi
         if [ "${_id}" = "${_scsiid}" -a "${_vname}" != "${_vdisk}" ]; then
-            echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname}"
-            exit 1
+            if [ "${_xhostid}" = "0" ] || echo "${_f2_host}" | grep -P "${_hosts}" > /dev/null; then
+                echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname} on host ${_f2_host}"
+                exit 1
+	    fi
         fi
         [ "${_id}" -ge "${_maxid}" ] && _maxid=$((_id + 1))
     done < <(ssh -n "${_dev}" lshostvdiskmap)
