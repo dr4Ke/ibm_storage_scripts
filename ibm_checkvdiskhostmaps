@@ -82,7 +82,7 @@ elif args.vdisk:
     
     sortconflicts = sorted(vdiskidconflicts.keys(), key=lambda x: int(x))
     for conflict in sortconflicts:
-        print('vDisk {} uses different SCSI IDs:'.format(conflict))
+        print('vDisk {} uses different SCSI IDs:'.format(vdiskidconflicts[conflict][0]['vdisk_name']))
         for entry in vdiskidconflicts[conflict]:
             print('   {} on {} and iogroup {}'.format(entry['scsi_id'],
                                                       entry['host_name'],
