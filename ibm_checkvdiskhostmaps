@@ -1,0 +1,89 @@
+#!/usr/bin/python
+#
+# Description: Check vDisk - Hosts mappings
+# Author:      Christophe Drevet-Droguet
+
+import sys
+
+# Parsing arguments
+import argparse
+parser = argparse.ArgumentParser(description='Check vDisk - Hosts mappings')
+parser.add_argument('device', metavar='DEVICE',
+               help='Hostname of the storage cluster')
+parser.add_argument('--version', action='version', version='%(prog)s dev')
+parser.add_argument('--host', default='.*',
+               help='Regular expression to select hosts mappings (default: .*)')
+bygroup = parser.add_mutually_exclusive_group(required=True)
+bygroup.add_argument('-d', '--vdisk', action='store_true',
+               help='Check by vDisk')
+bygroup.add_argument('-s', '--scsi', action='store_true',
+               help='Check by SCSI ID')
+args = parser.parse_args()
+
+print("Checking mappings on " + str(args.device))
+if args.host != '.*':
+    print("  with host patterns: " + str(args.host))
+if args.scsi:
+    print("  by SCSI ID")
+if args.vdisk:
+    print("  by vDisk")
+
+# Getting mappings
+from subprocess import check_output
+import re
+
+output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":"])
+mappings = []
+fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
+for line in output.split():
+    mapping = dict(zip(fields, line.split(':')))
+    if re.match(args.host + '$', mapping['host_name']):
+        mappings.append(mapping)
+
+# Store by SCSI and vDisk ID
+byvdiskid = {}
+byscsiid = {}
+for mapping in mappings:
+    entries = []
+    if mapping['vdisk_id'] in byvdiskid:
+        entries = byvdiskid[mapping['vdisk_id']]
+    entries.append(mapping)
+    byvdiskid.update({mapping['vdisk_id']: entries})
+
+    entries = []
+    if mapping['scsi_id'] in byscsiid:
+        entries = byscsiid[mapping['scsi_id']]
+    entries.append(mapping)
+    byscsiid.update({mapping['scsi_id']: entries})
+
+# Detect and print conflicts
+if args.scsi:
+    scsiidconflicts = {}
+    for scsiid, entries in byscsiid.iteritems():
+        vdiskid = entries[0]['vdisk_id']
+        for entry in entries:
+            if entry['vdisk_id'] != vdiskid:
+                scsiidconflicts.update({scsiid: entries})
+    
+    sortconflicts = sorted(scsiidconflicts.keys(), key=lambda x: int(x))
+    for conflict in sortconflicts:
+        print('SCSI ID {} used for different vDisks:'.format(conflict))
+        for entry in scsiidconflicts[conflict]:
+            print('   {} on {} and iogroup {}'.format(entry['vdisk_name'],
+                                                      entry['host_name'],
+                                                      entry['io_group_name']))
+elif args.vdisk:
+    vdiskidconflicts = {}
+    for vdiskid, entries in byvdiskid.iteritems():
+        scsiid = entries[0]['scsi_id']
+        for entry in entries:
+            if entry['scsi_id'] != scsiid:
+                vdiskidconflicts.update({vdiskid: entries})
+    
+    sortconflicts = sorted(vdiskidconflicts.keys(), key=lambda x: int(x))
+    for conflict in sortconflicts:
+        print('vDisk {} uses different SCSI IDs:'.format(conflict))
+        for entry in vdiskidconflicts[conflict]:
+            print('   {} on {} and iogroup {}'.format(entry['scsi_id'],
+                                                      entry['host_name'],
+                                                      entry['io_group_name']))
