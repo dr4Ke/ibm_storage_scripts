@@ -66,6 +66,7 @@ if args.scsi:
                 scsiidconflicts.update({scsiid: entries})
     
     sortconflicts = sorted(scsiidconflicts.keys(), key=lambda x: int(x))
+    print('{} conflicts on {} SCSI ID'.format(len(sortconflicts), len(byscsiid)))
     for conflict in sortconflicts:
         print('SCSI ID {} used for different vDisks:'.format(conflict))
         for entry in scsiidconflicts[conflict]:
@@ -81,6 +82,7 @@ elif args.vdisk:
                 vdiskidconflicts.update({vdiskid: entries})
     
     sortconflicts = sorted(vdiskidconflicts.keys(), key=lambda x: int(x))
+    print('{} conflicts on {} vDisks'.format(len(sortconflicts), len(byvdiskid)))
     for conflict in sortconflicts:
         print('vDisk {} uses different SCSI IDs:'.format(vdiskidconflicts[conflict][0]['vdisk_name']))
         for entry in vdiskidconflicts[conflict]:
