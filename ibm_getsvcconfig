@@ -14,13 +14,13 @@ function usage () {
     echo "    DEVICE:  Hostname of the storage cluster"
     echo "    GITREPO: git repository working dir"
     if [ "$#" != "0" ]; then
-        echo -e "\n$@"
+        echo -e "\n$@" >&2
     fi
     exit 2
 }
 
 function error {
-    echo "$@"
+    echo "$@" >&2
     exit 1
 }
 
