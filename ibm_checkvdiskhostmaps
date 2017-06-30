@@ -13,7 +13,7 @@ parser.add_argument('device', metavar='DEVICE',
 parser.add_argument('--version', action='version', version='%(prog)s dev')
 parser.add_argument('--host', default='.*',
                help='Regular expression to select hosts mappings (default: .*)')
-bygroup = parser.add_mutually_exclusive_group(required=True)
+bygroup = parser.add_mutually_exclusive_group(required=False)
 bygroup.add_argument('-d', '--vdisk', action='store_true',
                help='Check by vDisk')
 bygroup.add_argument('-s', '--scsi', action='store_true',
@@ -23,6 +23,9 @@ args = parser.parse_args()
 print("Checking mappings on " + str(args.device))
 if args.host != '.*':
     print("  with host patterns: " + str(args.host))
+if not args.scsi and not args.vdisk:
+    args.scsi = True
+    args.vdisk = True
 if args.scsi:
     print("  by SCSI ID")
 if args.vdisk:
@@ -73,7 +76,7 @@ if args.scsi:
             print('   {} on {} and iogroup {}'.format(entry['vdisk_name'],
                                                       entry['host_name'],
                                                       entry['io_group_name']))
-elif args.vdisk:
+if args.vdisk:
     vdiskidconflicts = {}
     for vdiskid, entries in byvdiskid.iteritems():
         scsiid = entries[0]['scsi_id']
