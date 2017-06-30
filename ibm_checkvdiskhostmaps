@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 #
 # Description: Check vDisk - Hosts mappings
 # Author:      Christophe Drevet-Droguet
