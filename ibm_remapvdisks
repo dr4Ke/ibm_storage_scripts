@@ -1,0 +1,102 @@
+#!/usr/bin/python2.7
+#
+# Description: List mappings, remove them and make them again with
+#              fixed SCSI IDs
+# Author:      Christophe Drevet-Droguet
+
+import sys
+
+# Parsing arguments
+import argparse
+parser = argparse.ArgumentParser(description='List mappings, remove them and make them again with fixed SCSI IDs')
+parser.add_argument('device', metavar='DEVICE',
+               help='Hostname of the storage cluster')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1')
+parser.add_argument('host', metavar='HOST',
+               help='name of the host to remap')
+parser.add_argument('--like', default=False,
+               help='name of the host to get SCSI IDs from')
+parser.add_argument('--action', default=False, action='store_true',
+               help='do the stuff')
+parser.add_argument('-v', '--verbose', default=False, action='store_true',
+               help='print verbose output')
+#bygroup = parser.add_mutually_exclusive_group(required=False)
+#bygroup.add_argument('-d', '--vdisk', action='store_true',
+#               help='Check by vDisk')
+#bygroup.add_argument('-s', '--scsi', action='store_true',
+#               help='Check by SCSI ID')
+args = parser.parse_args()
+
+print("Remap vdisks on " + str(args.device))
+if args.host != '.*':
+    print("  with host patterns: " + str(args.host))
+if args.action:
+    ACTION = ''
+else:
+    ACTION = 'TEST MODE, NO ACTION DONE: '
+
+# Get mappings
+from subprocess import check_output
+import re
+
+output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.host])
+mappings = []
+fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
+for line in output.split():
+    mapping = dict(zip(fields, line.split(':')))
+    mappings.append(mapping)
+
+if args.like:
+    output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.like])
+    likemaps = {}
+    fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
+    for line in output.split():
+        mapping = dict(zip(fields, line.split(':')))
+        if mapping['vdisk_id'] not in likemaps:
+            likemaps.update({mapping['vdisk_id']: mapping['scsi_id']})
+
+done = []
+for mapping in mappings:
+    if mapping['vdisk_id'] not in done:
+
+        # Unmap vDisk
+        print('{}Unmapping vdisk {} from {}'.format(ACTION, mapping['vdisk_name'], args.host))
+        command = ["ssh", args.device, "rmvdiskhostmap", "-host", args.host, mapping['vdisk_id']]
+        if args.verbose:
+            print('INFO: Execute command: {}'.format(' '.join(command)))
+        if args.action:
+            output = check_output(command)
+        else:
+            output = 'No action done'
+        if args.verbose:
+            print('rmvdiskhostmap output: ' + output)
+        done.append(mapping['vdisk_id'])
+
+done = []
+scsiid = 0
+for mapping in mappings:
+    if mapping['vdisk_id'] not in done:
+
+        # Get SCSI ID
+        if args.like:
+            if mapping['vdisk_id'] in likemaps:
+                scsiid = likemaps[mapping['vdisk_id']]
+            else:
+                print('WARNING: vdisk {} not present in reference {}, not mapping.'.format(mapping['vdisk_name'], args.like))
+                scsiid =  False
+        else:
+            scsiid += 1
+
+        # Map vDisk with new SCSI ID
+        if scsiid:
+            print('{}Mapping vdisk {} with SCSI ID {}'.format(ACTION, mapping['vdisk_name'], scsiid))
+            command = ["ssh", args.device, "mkvdiskhostmap", "-force", "-host", args.host, "-scsi", str(scsiid), mapping['vdisk_id']]
+            if args.verbose:
+                print('INFO: Execute command: {}'.format(' '.join(command)))
+            if args.action:
+                output = check_output(command)
+            else:
+                output = 'No action done'
+            if args.verbose:
+                print('mkvdiskhostmap output: ' + output)
+        done.append(mapping['vdisk_id'])
