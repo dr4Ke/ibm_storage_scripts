@@ -4,7 +4,7 @@
 # Author:      Christophe Drevet-Droguet
 
 typeset PROG="$(basename "$0")"
-typeset VERSION="0.4"
+typeset VERSION="0.5"
 
 typeset _host
 typeset _dev=
@@ -19,8 +19,6 @@ typeset -i imax=$#
 for (( i=0; i<${imax}; i++ )); do
     if [ "$1" = "-n" ]; then
         _noaction=1
-    elif [ "$1" = "-x" ]; then
-        _xhostid=1
     elif [ -z "${_dev}" ]; then
         _dev="$1"
     elif [ -z "${_hosts}" ]; then
@@ -35,16 +33,15 @@ done
 
 if [ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk_pattern}" ]; then
     echo "${PROG} version ${VERSION}"
-    echo "usage: ${PROG} [-n] [-x] DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID ...]"
+    echo "usage: ${PROG} [-n] DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID ...]"
     echo ""
     echo "  OPTIONS:"
     echo "    -n: no action, just show what would be done."
-    echo "    -x: don't abort if scsi id is used in other hosts."
     echo ""
     echo "  PARAMETERS:"
     echo "    DEVICE:        Hostname of the storage cluster"
     echo "    HOSTS_PATTERN: Regular expression to select hosts to map (used"
-    echo "                   with 'grep -P')"
+    echo "                   with 'grep -P' and '=~' bash operator)"
     echo "    VDISK_PATTERN: Regular expression to select vdisks to map"
     echo "    SCSI_ID:       Force the use of this SCSI ID. There must be"
     echo "                   an ID for each selected vdisk. If there is not"
@@ -58,19 +55,19 @@ function map_vdisk_to_host {
     local _vdiskok=0
     local _vdisk="$1"
     local _scsiid="$2"
+    local _vdiskcount="$3"
     local _error=0
 
     # Check SCSI ID in use, and get the next available
     while read _f1 _f2_host _id _f4 _vname _f6; do
         [ "${_f1}" = "id" ] && continue
+        [[ "${_f2_host}" =~ ${_hosts} ]] || continue
         if [ -z "${_scsiid}" -a "${_vname}" = "${_vdisk}" ]; then
             _scsiid="${_id}"
         fi
         if [ "${_id}" = "${_scsiid}" -a "${_vname}" != "${_vdisk}" ]; then
-            if [ "${_xhostid}" = "0" ] || echo "${_f2_host}" | grep -P "${_hosts}" > /dev/null; then
-                echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname} on host ${_f2_host}"
-                _error=1
-	    fi
+            echo "ERROR: SCSI ID already in use: ${_scsiid} for ${_vname} on host ${_f2_host}"
+            _error=1
         fi
         [ "${_id}" -ge "${_maxid}" ] && _maxid=$((_id + 1))
     done < <(ssh -n "${_dev}" lshostvdiskmap)
@@ -86,7 +83,7 @@ function map_vdisk_to_host {
         exit 1
     fi
 
-    [ -z "${_scsiid}" ] && _scsiid="${_maxid}"
+    [ -z "${_scsiid}" ] && _scsiid=$((${_maxid} + ${_vdiskcount}))
     echo "INFO: Using ${_scsiid} as SCSI ID for ${_vdisk}"
 
     while read _host; do
@@ -114,7 +111,7 @@ fi
 i=0
 for _vdisk in "${_vdisks[@]}"; do
     if [ -z "${_scsiids[$i]}" ]; then
-        map_vdisk_to_host "${_vdisk}"
+        map_vdisk_to_host "${_vdisk}" "" $i
     else
         map_vdisk_to_host "${_vdisk}" "${_scsiids[$i]}"
     fi
