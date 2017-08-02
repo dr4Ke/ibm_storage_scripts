@@ -55,6 +55,7 @@ function map_vdisk_to_host {
     local _vdiskok=0
     local _vdisk="$1"
     local _scsiid="$2"
+    local _vdiskcount="$3"
     local _error=0
 
     # Check SCSI ID in use, and get the next available
@@ -82,7 +83,7 @@ function map_vdisk_to_host {
         exit 1
     fi
 
-    [ -z "${_scsiid}" ] && _scsiid="${_maxid}"
+    [ -z "${_scsiid}" ] && _scsiid=$((${_maxid} + ${_vdiskcount}))
     echo "INFO: Using ${_scsiid} as SCSI ID for ${_vdisk}"
 
     while read _host; do
