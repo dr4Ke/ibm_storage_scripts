@@ -83,7 +83,10 @@ function map_vdisk_to_host {
         exit 1
     fi
 
-    [ -z "${_scsiid}" ] && _scsiid=$((${_maxid} + ${_vdiskcount}))
+    if [ -z "${_scsiid}" ]; then
+        _scsiid=${_maxid}
+        [ "${_noaction}" = "0" ] || _scsiid=$((${_scsiid} + ${_vdiskcount}))
+    fi
     echo "INFO: Using ${_scsiid} as SCSI ID for ${_vdisk}"
 
     while read _host; do
