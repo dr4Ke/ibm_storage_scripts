@@ -46,6 +46,7 @@ for line in output.split():
 # Store by SCSI and vDisk ID
 byvdiskid = {}
 byscsiid = {}
+byhost = {}
 for mapping in mappings:
     entries = []
     if mapping['vdisk_id'] in byvdiskid:
@@ -58,6 +59,20 @@ for mapping in mappings:
         entries = byscsiid[mapping['scsi_id']]
     entries.append(mapping)
     byscsiid.update({mapping['scsi_id']: entries})
+
+    if mapping['host_name'] in byhost:
+        entries = byhost[mapping['host_name']]
+    else:
+        entries = []
+    entries.append(mapping['vdisk_id'])
+    byhost.update({mapping['host_name']: entries})
+
+# Detect and print missing devices
+for vdiskid in byvdiskid:
+    vdisk = byvdiskid[vdiskid][0]['vdisk_name']
+    for host in byhost.keys():
+        if vdiskid not in byhost[host]:
+            print('WARNING: vDisk {} not mapped to {}'.format(vdisk, host))
 
 # Detect and print conflicts
 if args.scsi:
