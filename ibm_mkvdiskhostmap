@@ -6,10 +6,35 @@
 typeset PROG="$(basename "$0")"
 typeset VERSION="dev"
 
+function usage {
+    if [ "$#" != "0" ]; then
+        echo "ERROR: $@"
+        echo ""
+    fi
+    echo "${PROG} version ${VERSION}"
+    echo "usage: ${PROG} [-h] [-n] DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID ...]"
+    echo ""
+    echo "  OPTIONS:"
+    echo "    -h|--help:     this usage page"
+    echo "    -n|--noaction: no action, just show what would be done."
+    echo ""
+    echo "  PARAMETERS:"
+    echo "    DEVICE:        Hostname of the storage cluster"
+    echo "    HOSTS_PATTERN: Regular expression to select hosts to map (used"
+    echo "                   with 'grep -P' and '=~' bash operator)"
+    echo "    VDISK_PATTERN: Regular expression to select vdisks to map or"
+    echo "                   a file containing a vdisks list"
+    echo "    SCSI_ID:       Force the use of this SCSI ID. There must be"
+    echo "                   an ID for each selected vdisk. If there is not"
+    echo "                   enough IDs, the default policy is used: last + 1"
+    exit 2
+}
+
 typeset _host
 typeset _dev=
 typeset _hosts=
 typeset _vdisk_pattern=
+typeset _vdisk_file=
 typeset _noaction=0
 typeset _xhostid=0
 typeset -a _scsiids
@@ -19,6 +44,8 @@ typeset -i imax=$#
 for (( i=0; i<${imax}; i++ )); do
     if [ "$1" = "-n" ]; then
         _noaction=1
+    elif [ "$1" = "-h" -o "$1" = "--help" ]; then
+        usage
     elif [ -z "${_dev}" ]; then
         _dev="$1"
     elif [ -z "${_hosts}" ]; then
@@ -31,23 +58,19 @@ for (( i=0; i<${imax}; i++ )); do
     shift
 done
 
-if [ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk_pattern}" ]; then
-    echo "${PROG} version ${VERSION}"
-    echo "usage: ${PROG} [-n] DEVICE HOSTS_PATTERN VDISK_PATTERN [SCSI_ID ...]"
-    echo ""
-    echo "  OPTIONS:"
-    echo "    -n: no action, just show what would be done."
-    echo ""
-    echo "  PARAMETERS:"
-    echo "    DEVICE:        Hostname of the storage cluster"
-    echo "    HOSTS_PATTERN: Regular expression to select hosts to map (used"
-    echo "                   with 'grep -P' and '=~' bash operator)"
-    echo "    VDISK_PATTERN: Regular expression to select vdisks to map"
-    echo "    SCSI_ID:       Force the use of this SCSI ID. There must be"
-    echo "                   an ID for each selected vdisk. If there is not"
-    echo "                   enough IDs, the default policy is used: last + 1"
-    exit 2
+if [ -f "${_vdisk_pattern}" ]; then
+    _vdisk_file="${_vdisk_pattern}"
+    _vdisk_pattern=
+    while read _vdisk; do
+        [ -z "${_vdisk_pattern}" ] && _vdisk_pattern="(" \
+                                   || _vdisk_pattern="${_vdisk_pattern}|"
+        _vdisk_pattern="${_vdisk_pattern}${_vdisk}"
+    done < "${_vdisk_file}"
+    [ -n "${_vdisk_pattern}" ] && _vdisk_pattern="${_vdisk_pattern})"
 fi
+
+[ -z "${_vdisk_pattern}" -a -n "${_vdisk_file}" ] && usage "File list empty or unreadable"
+[ -z "${_dev}" -o -z "${_hosts}" -o -z "${_vdisk_pattern}" ] && usage
 
 function map_vdisk_to_host {
     local _f1 _f2 _id _f3 _f4 _vname _f6
