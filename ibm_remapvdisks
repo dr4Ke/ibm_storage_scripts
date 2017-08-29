@@ -14,6 +14,8 @@ parser.add_argument('device', metavar='DEVICE',
 parser.add_argument('--version', action='version', version='%(prog)s dev')
 parser.add_argument('host', metavar='HOST',
                help='name of the host to remap')
+parser.add_argument('--clean', default=False, action='store_true',
+               help='remove all mappings')
 parser.add_argument('--like', default=False,
                help='name of the host to get SCSI IDs from')
 parser.add_argument('--action', default=False, action='store_true',
@@ -27,7 +29,10 @@ parser.add_argument('-v', '--verbose', default=False, action='store_true',
 #               help='Check by SCSI ID')
 args = parser.parse_args()
 
-print("Remap vdisks on " + str(args.device))
+if args.clean:
+    print("Remove vdisks mappings on " + str(args.device))
+else:
+    print("Remap vdisks on " + str(args.device))
 if args.host != '.*':
     print("  with host patterns: " + str(args.host))
 if args.action:
@@ -71,6 +76,9 @@ for mapping in mappings:
         if args.verbose:
             print('rmvdiskhostmap output: ' + output)
         done.append(mapping['vdisk_id'])
+
+if args.clean:
+    sys.exit(0)
 
 done = []
 scsiid = 0
