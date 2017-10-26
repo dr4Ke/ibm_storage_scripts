@@ -12,10 +12,17 @@ DEVICE="$1"
 
 while IFS=':' read fcmapid fcmapname sourceid sourcename destid destname grpid grpname trash; do
     [ "${fcmapid}" = "id" ] && continue
-    depends=$(ssh -n ${DEVICE} lsfcmapdependentmaps ${fcmapid})
+    depends=$(ssh -n ${DEVICE} lsfcmapdependentmaps -delim : -nohdr ${fcmapid})
     if [ -n "${depends}" ]; then
-        echo -e "\n==== ${fcmapid}: ${fcmapname} (${sourcename} => ${destname}) ====\n${depends}"
+        echo -e "\n==== ${fcmapid}: ${fcmapname} (${sourcename} => ${destname}) ===="
+	while IFS=':' read depid depname; do
+            depdef=$(ssh -n ${DEVICE} "lsfcmap -delim : ${depid}")
+            sname=$(echo "${depdef}" | grep '^source_vdisk_name:' | cut -d: -f2)
+            tname=$(echo "${depdef}" | grep '^target_vdisk_name:' | cut -d: -f2)
+	    echo "${depid}: ${depname}: ${sname} => ${tname}"
+        done < <(echo "${depends}")
     else
         echo -n "." >&2
     fi
 done < <(ssh ${DEVICE} lsfcmap -delim :)
+echo ""

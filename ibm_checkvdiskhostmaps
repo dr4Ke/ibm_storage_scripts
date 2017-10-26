@@ -13,19 +13,22 @@ parser.add_argument('device', metavar='DEVICE',
 parser.add_argument('--version', action='version', version='%(prog)s 0.3')
 parser.add_argument('--host', default='.*',
                help='Regular expression to select hosts mappings (default: .*)')
-bygroup = parser.add_mutually_exclusive_group(required=False)
-bygroup.add_argument('-d', '--vdisk', action='store_true',
+actiongroup = parser.add_argument_group('Action')
+actiongroup.add_argument('-m', '--missing', action='store_true',
+               help='Check missing vDisks (default)')
+actiongroup.add_argument('-d', '--vdisk', action='store_true',
                help='Check by vDisk')
-bygroup.add_argument('-s', '--scsi', action='store_true',
+actiongroup.add_argument('-s', '--scsi', action='store_true',
                help='Check by SCSI ID')
 args = parser.parse_args()
 
 print("Checking mappings on " + str(args.device))
 if args.host != '.*':
     print("  with host patterns: " + str(args.host))
-if not args.scsi and not args.vdisk:
-    args.scsi = True
-    args.vdisk = True
+if not args.missing and not args.scsi and not args.vdisk:
+    args.missing = True
+if args.missing:
+    print("  for missing vDisks")
 if args.scsi:
     print("  by SCSI ID")
 if args.vdisk:
@@ -46,6 +49,7 @@ for line in output.split():
 # Store by SCSI and vDisk ID
 byvdiskid = {}
 byscsiid = {}
+byhost = {}
 for mapping in mappings:
     entries = []
     if mapping['vdisk_id'] in byvdiskid:
@@ -58,6 +62,28 @@ for mapping in mappings:
         entries = byscsiid[mapping['scsi_id']]
     entries.append(mapping)
     byscsiid.update({mapping['scsi_id']: entries})
+
+    if mapping['host_name'] in byhost:
+        entries = byhost[mapping['host_name']]
+    else:
+        entries = []
+    entries.append(mapping['vdisk_id'])
+    byhost.update({mapping['host_name']: entries})
+
+# Detect missing devices
+missing = []
+for vdiskid in byvdiskid:
+    vdisk = byvdiskid[vdiskid][0]['vdisk_name']
+    for host in byhost.keys():
+        if vdiskid not in byhost[host]:
+            missing.append((host, vdiskid))
+
+# Print missing devices
+if args.missing and missing != []:
+    print("Missing {} mappings on {}".format(len(missing), len(byscsiid)))
+    sortmissing = sorted(missing)
+    for entry in sortmissing:
+        print('WARNING: vDisk {} not mapped to {}'.format(byvdiskid[entry[1]][0]['vdisk_name'], entry[0]))
 
 # Detect and print conflicts
 if args.scsi:

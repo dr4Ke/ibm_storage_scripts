@@ -5,6 +5,9 @@
 # Author:      Christophe Drevet-Droguet
 
 import sys
+from subprocess import check_output
+import re
+
 
 # Parsing arguments
 import argparse
@@ -14,49 +17,69 @@ parser.add_argument('device', metavar='DEVICE',
 parser.add_argument('--version', action='version', version='%(prog)s 0.1')
 parser.add_argument('host', metavar='HOST',
                help='name of the host to remap')
+actiongrp = parser.add_mutually_exclusive_group(required=False)
+actiongrp.add_argument('--clean', default=False, action='store_true',
+               help='remove all mappings')
+actiongrp.add_argument('--file',
+               help='map volumes from file list')
+actiongrp.add_argument('--clone', default=False,
+               help='map volumes mapped to another host')
 parser.add_argument('--like', default=False,
                help='name of the host to get SCSI IDs from')
 parser.add_argument('--action', default=False, action='store_true',
                help='do the stuff')
 parser.add_argument('-v', '--verbose', default=False, action='store_true',
                help='print verbose output')
-#bygroup = parser.add_mutually_exclusive_group(required=False)
-#bygroup.add_argument('-d', '--vdisk', action='store_true',
-#               help='Check by vDisk')
-#bygroup.add_argument('-s', '--scsi', action='store_true',
-#               help='Check by SCSI ID')
 args = parser.parse_args()
 
-print("Remap vdisks on " + str(args.device))
+# Check parameters
+if args.clean:
+    print("Remove vdisks mappings on " + str(args.device))
+else:
+    print("Remap vdisks on " + str(args.device))
 if args.host != '.*':
     print("  with host patterns: " + str(args.host))
+if args.clone:
+    print("  taking mappings info on " + str(args.clone))
 if args.action:
     ACTION = ''
 else:
     ACTION = 'TEST MODE, NO ACTION DONE: '
 
+
+
 # Get mappings
-from subprocess import check_output
-import re
-
-output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.host])
-mappings = []
-fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
-for line in output.split():
-    mapping = dict(zip(fields, line.split(':')))
-    mappings.append(mapping)
-
-if args.like:
-    output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.like])
-    likemaps = {}
+if args.file:
+    with open(args.file) as f:
+        for line in f.readline():
+            print line
+else:
+    output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.host])
+    mappings = []
     fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
     for line in output.split():
         mapping = dict(zip(fields, line.split(':')))
-        if mapping['vdisk_id'] not in likemaps:
-            likemaps.update({mapping['vdisk_id']: mapping['scsi_id']})
+        mappings.append(mapping)
+    unmappings = mappings
+    if args.clone:
+        output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.clone])
+        mappings = []
+        fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
+        for line in output.split():
+            mapping = dict(zip(fields, line.split(':')))
+            mappings.append(mapping)
+
+    if args.like:
+        output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.like])
+        likemaps = {}
+        fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
+        for line in output.split():
+            mapping = dict(zip(fields, line.split(':')))
+            if mapping['vdisk_id'] not in likemaps:
+                likemaps.update({mapping['vdisk_id']: mapping['scsi_id']})
 
 done = []
-for mapping in mappings:
+for mapping in unmappings:
     if mapping['vdisk_id'] not in done:
 
         # Unmap vDisk
@@ -71,6 +94,9 @@ for mapping in mappings:
         if args.verbose:
             print('rmvdiskhostmap output: ' + output)
         done.append(mapping['vdisk_id'])
+
+if args.clean:
+    sys.exit(0)
 
 done = []
 scsiid = 0
@@ -89,7 +115,7 @@ for mapping in mappings:
 
         # Map vDisk with new SCSI ID
         if scsiid:
-            print('{}Mapping vdisk {} with SCSI ID {}'.format(ACTION, mapping['vdisk_name'], scsiid))
+            print('{}Mapping vdisk {} with SCSI ID {} on {}'.format(ACTION, mapping['vdisk_name'], scsiid, args.host))
             command = ["ssh", args.device, "mkvdiskhostmap", "-force", "-host", args.host, "-scsi", str(scsiid), mapping['vdisk_id']]
             if args.verbose:
                 print('INFO: Execute command: {}'.format(' '.join(command)))
