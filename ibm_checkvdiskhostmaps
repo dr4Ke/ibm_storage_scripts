@@ -10,7 +10,7 @@ import argparse
 parser = argparse.ArgumentParser(description='Check vDisk - Hosts mappings')
 parser.add_argument('device', metavar='DEVICE',
                help='Hostname of the storage cluster')
-parser.add_argument('--version', action='version', version='%(prog)s 0.3')
+parser.add_argument('--version', action='version', version='%(prog)s 0.4')
 parser.add_argument('--host', default='.*',
                help='Regular expression to select hosts mappings (default: .*)')
 actiongroup = parser.add_argument_group('Action')

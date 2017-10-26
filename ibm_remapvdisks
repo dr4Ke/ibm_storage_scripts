@@ -14,7 +14,7 @@ import argparse
 parser = argparse.ArgumentParser(description='List mappings, remove them and make them again with fixed SCSI IDs')
 parser.add_argument('device', metavar='DEVICE',
                help='Hostname of the storage cluster')
-parser.add_argument('--version', action='version', version='%(prog)s 0.1')
+parser.add_argument('--version', action='version', version='%(prog)s 0.2')
 parser.add_argument('host', metavar='HOST',
                help='name of the host to remap')
 actiongrp = parser.add_mutually_exclusive_group(required=False)

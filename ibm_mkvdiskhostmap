@@ -4,7 +4,7 @@
 # Author:      Christophe Drevet-Droguet
 
 typeset PROG="$(basename "$0")"
-typeset VERSION="0.5.1"
+typeset VERSION="0.6"
 
 function usage {
     if [ "$#" != "0" ]; then
