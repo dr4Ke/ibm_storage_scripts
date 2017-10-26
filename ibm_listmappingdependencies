@@ -2,7 +2,7 @@
 #
 # List all mapping dependencies for all mappings
 PROG="$(basename "$0")"
-VERSION="dev"
+VERSION="0.2"
 
 function usage () {
     echo "Version: ${VERSION}"
