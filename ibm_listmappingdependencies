@@ -1,9 +1,12 @@
 #!/bin/bash
 #
 # List all mapping dependencies for all mappings
+PROG="$(basename "$0")"
+VERSION="dev"
 
 function usage () {
-    echo "$(basename "$0") DEVICE"
+    echo "Version: ${VERSION}"
+    echo "${PROG} DEVICE"
     exit 2
 }
 
