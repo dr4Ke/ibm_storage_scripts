@@ -110,11 +110,12 @@ for mapping in mappings:
             else:
                 print('WARNING: vdisk {} not present in reference {}, not mapping.'.format(mapping['vdisk_name'], args.like))
                 scsiid =  False
-        else:
-            scsiid += 1
+
+        if args.clone:
+            scsiid = mapping['scsi_id']
 
         # Map vDisk with new SCSI ID
-        if scsiid:
+        if scsiid is not False:
             print('{}Mapping vdisk {} with SCSI ID {} on {}'.format(ACTION, mapping['vdisk_name'], scsiid, args.host))
             command = ["ssh", args.device, "mkvdiskhostmap", "-force", "-host", args.host, "-scsi", str(scsiid), mapping['vdisk_id']]
             if args.verbose:
@@ -126,3 +127,7 @@ for mapping in mappings:
             if args.verbose:
                 print('mkvdiskhostmap output: ' + output)
         done.append(mapping['vdisk_id'])
+
+        # Increment SCSI ID
+        if not args.like and not args.clone:
+            scsiid += 1
