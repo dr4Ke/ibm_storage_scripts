@@ -111,6 +111,9 @@ for mapping in mappings:
                 print('WARNING: vdisk {} not present in reference {}, not mapping.'.format(mapping['vdisk_name'], args.like))
                 scsiid =  False
 
+        if args.clone:
+            scsiid = mapping['scsi_id']
+
         # Map vDisk with new SCSI ID
         if scsiid is not False:
             print('{}Mapping vdisk {} with SCSI ID {} on {}'.format(ACTION, mapping['vdisk_name'], scsiid, args.host))
@@ -126,5 +129,5 @@ for mapping in mappings:
         done.append(mapping['vdisk_id'])
 
         # Increment SCSI ID
-        if not args.like:
+        if not args.like and not args.clone:
             scsiid += 1
