@@ -49,34 +49,35 @@ else:
 
 
 # Get mappings
+output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.host])
+mappings = []
+fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
+for line in output.split():
+    mapping = dict(zip(fields, line.split(':')))
+    mappings.append(mapping)
+unmappings = mappings
 if args.file:
+    mappings = []
     with open(args.file) as f:
-        for line in f.readline():
-            print line
-else:
-    output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.host])
+        for line in f:
+            line = line.split()[0]
+            mappings.append({'vdisk_id': line, 'vdisk_name': line})
+if args.clone:
+    output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.clone])
     mappings = []
     fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
     for line in output.split():
         mapping = dict(zip(fields, line.split(':')))
         mappings.append(mapping)
-    unmappings = mappings
-    if args.clone:
-        output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.clone])
-        mappings = []
-        fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
-        for line in output.split():
-            mapping = dict(zip(fields, line.split(':')))
-            mappings.append(mapping)
 
-    if args.like:
-        output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.like])
-        likemaps = {}
-        fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
-        for line in output.split():
-            mapping = dict(zip(fields, line.split(':')))
-            if mapping['vdisk_id'] not in likemaps:
-                likemaps.update({mapping['vdisk_id']: mapping['scsi_id']})
+if args.like:
+    output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.like])
+    likemaps = {}
+    fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
+    for line in output.split():
+        mapping = dict(zip(fields, line.split(':')))
+        if mapping['vdisk_id'] not in likemaps:
+            likemaps.update({mapping['vdisk_id']: mapping['scsi_id']})
 
 done = []
 for mapping in unmappings:
