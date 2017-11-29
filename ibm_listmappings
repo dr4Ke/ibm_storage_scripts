@@ -2,7 +2,7 @@
 #
 # List all FlashCopy mappings parameters
 PROG="$(basename "$0")"
-VERSION="dev"
+VERSION="0.1"
 
 function usage () {
     echo "Version: ${VERSION}"
