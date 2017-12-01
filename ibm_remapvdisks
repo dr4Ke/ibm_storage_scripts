@@ -5,7 +5,7 @@
 # Author:      Christophe Drevet-Droguet
 
 import sys
-from subprocess import check_output
+from subprocess import check_output, Popen, PIPE
 import re
 
 
@@ -46,10 +46,31 @@ if args.action:
 else:
     ACTION = 'TEST MODE, NO ACTION DONE: '
 
+def open_ssh():
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: opening SSH control session")
+    return Popen(['ssh', '-T', '-oControlMaster=yes', controlpath, args.device], stdin=PIPE, stdout=None, stderr=None)
 
+def close_ssh(sshproc):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: closing SSH control session")
+    return sshproc.communicate("exit\n")
+
+def cmd_ssh(cmd):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    command = ["ssh", '-oControlMaster=no' , controlpath, args.device]
+    command.extend(cmd)
+    if args.verbose:
+        print("INFO: running command '{}'".format(' '.join(cmd)))
+    return check_output(command)
+
+# Open SSH connection
+sshproc = open_ssh()
 
 # Get mappings
-output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.host])
+output = cmd_ssh(["lshostvdiskmap", "-nohdr", "-delim", ":", args.host])
 mappings = []
 fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
 for line in output.split():
@@ -63,7 +84,7 @@ if args.file:
             line = line.split()[0]
             mappings.append({'vdisk_id': line, 'vdisk_name': line})
 if args.clone:
-    output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.clone])
+    output = cmd_ssh(["lshostvdiskmap", "-nohdr", "-delim", ":", args.clone])
     mappings = []
     fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
     for line in output.split():
@@ -71,7 +92,7 @@ if args.clone:
         mappings.append(mapping)
 
 if args.like:
-    output = check_output(["ssh", args.device, "lshostvdiskmap", "-nohdr", "-delim", ":", args.like])
+    output = cmd_ssh(["lshostvdiskmap", "-nohdr", "-delim", ":", args.like])
     likemaps = {}
     fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid', 'io_group_id', 'io_group_name']
     for line in output.split():
@@ -85,11 +106,11 @@ for mapping in unmappings:
 
         # Unmap vDisk
         print('{}Unmapping vdisk {} from {}'.format(ACTION, mapping['vdisk_name'], args.host))
-        command = ["ssh", args.device, "rmvdiskhostmap", "-host", args.host, mapping['vdisk_id']]
+        command = ["rmvdiskhostmap", "-host", args.host, mapping['vdisk_id']]
         if args.verbose:
             print('INFO: Execute command: {}'.format(' '.join(command)))
         if args.action:
-            output = check_output(command)
+            output = cmd_ssh(command)
         else:
             output = 'No action done'
         if args.verbose:
@@ -97,6 +118,7 @@ for mapping in unmappings:
         done.append(mapping['vdisk_id'])
 
 if args.clean:
+    close_ssh(sshproc)
     sys.exit(0)
 
 done = []
@@ -118,11 +140,11 @@ for mapping in mappings:
         # Map vDisk with new SCSI ID
         if scsiid is not False:
             print('{}Mapping vdisk {} with SCSI ID {} on {}'.format(ACTION, mapping['vdisk_name'], scsiid, args.host))
-            command = ["ssh", args.device, "mkvdiskhostmap", "-force", "-host", args.host, "-scsi", str(scsiid), mapping['vdisk_id']]
+            command = ["mkvdiskhostmap", "-force", "-host", args.host, "-scsi", str(scsiid), mapping['vdisk_id']]
             if args.verbose:
                 print('INFO: Execute command: {}'.format(' '.join(command)))
             if args.action:
-                output = check_output(command)
+                output = cmd_ssh(command)
             else:
                 output = 'No action done'
             if args.verbose:
@@ -132,3 +154,6 @@ for mapping in mappings:
         # Increment SCSI ID
         if not args.like and not args.clone:
             scsiid += 1
+
+# Close SSH connection
+close_ssh(sshproc)
