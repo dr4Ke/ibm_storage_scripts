@@ -1,0 +1,73 @@
+#!/usr/bin/python2.7
+#
+# List all unused objects
+from __future__ import print_function
+import sys
+from subprocess import check_output, Popen, PIPE
+
+
+# Parsing arguments
+import argparse
+parser = argparse.ArgumentParser(description='List all unused objects')
+parser.add_argument('device', metavar='DEVICE',
+               help='Hostname of the storage cluster')
+parser.add_argument('--version', action='version', version='%(prog)s dev')
+parser.add_argument('-v', '--verbose', default=False, action='store_true',
+               help='print verbose output')
+args = parser.parse_args()
+
+def open_ssh():
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: opening SSH control session")
+    return Popen(['ssh', '-T', '-oControlMaster=yes', controlpath, args.device], stdin=PIPE, stdout=None, stderr=None)
+
+def close_ssh(sshproc):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: closing SSH control session")
+    return sshproc.communicate("exit\n")
+
+def cmd_ssh(cmd):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    command = ["ssh", '-oControlMaster=no' , controlpath, args.device]
+    command.extend(cmd)
+    if args.verbose:
+        print("INFO: running command '{}'".format(' '.join(cmd)))
+    return check_output(command)
+
+# Open SSH connection
+sshproc = open_ssh()
+
+output = cmd_ssh(["lshostvdiskmap", "-nohdr", "-delim", ":"])
+mappedvdisks = []
+mappedhosts  = []
+for line in output.split():
+    mappedvdisks.append(line.split(':')[3])
+    mappedhosts.append(line.split(':')[0])
+
+print("#### Unused vdisks:")
+output = cmd_ssh(["lsvdisk", "-nohdr", "-delim", ":"])
+for line in output.split():
+    vdisk = line.split(':')
+    if vdisk[0] not in mappedvdisks:
+        print(vdisk[0] + ':' + vdisk[1])
+print()
+
+print("#### Unused consistency groups:")
+output = cmd_ssh(["lsfcconsistgrp", "-nohdr", "-delim", ":"])
+fields = ['id', 'name', 'status', 'start_time']
+for line in output.split():
+    fcgrp = line.split(':')
+    if fcgrp[2] == "empty":
+        print(fcgrp[0] + ':' + fcgrp[1])
+print()
+
+print("#### Unused hosts:")
+output = cmd_ssh(["lshost", "-nohdr", "-delim", ":"])
+for line in output.split():
+    host = line.split(':')
+    if host[0] not in mappedhosts:
+        print(host[0] + ':' + host[1])
+
+close_ssh(sshproc)
