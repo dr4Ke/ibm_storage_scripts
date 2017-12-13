@@ -1,28 +1,64 @@
-#!/bin/bash
+#!/usr/bin/python2.7
 #
 # List all FlashCopy mappings parameters
-PROG="$(basename "$0")"
-VERSION="dev"
+from __future__ import print_function
+import sys
+from subprocess import check_output, Popen, PIPE
 
-function usage () {
-    echo "Version: ${VERSION}"
-    echo "${PROG} DEVICE"
-    exit 2
-}
 
-DEVICE="$1"
-[ -z "${DEVICE}" ] && usage
+# Parsing arguments
+import argparse
+parser = argparse.ArgumentParser(description='List all FlashCopy mappings with all parameters')
+parser.add_argument('device', metavar='DEVICE',
+               help='Hostname of the storage cluster')
+parser.add_argument('--version', action='version', version='%(prog)s dev')
+parser.add_argument('-v', '--verbose', default=False, action='store_true',
+               help='print verbose output')
+args = parser.parse_args()
 
-echo -n "id:name:source_vdisk_id:source_vdisk_name:target_vdisk_id:"
-echo -n "target_vdisk_name:group_id:group_name:status:progress:copy_rate:"
-echo -n "start_time:dependent_mappings:autodelete:clean_progress:clean_rate:"
-echo -n "incremental:difference:grain_size:IO_group_id:IO_group_name:"
-echo    "partner_FC_id:partner_FC_name:restoring:rc_controlled"
-while IFS=':' read id trash; do
-    while IFS=':' read param value; do
-        echo -n "${value}"
-	[ "${id}" != "rc_controlled" ] && echo -n ":"
-    done < <(ssh -n ${DEVICE} "lsfcmap -delim : ${id}")
-    echo ""
-done < <(ssh ${DEVICE} lsfcmap -nohdr -delim :)
-echo ""
+def open_ssh():
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: opening SSH control session")
+    return Popen(['ssh', '-T', '-oControlMaster=yes', controlpath, args.device], stdin=PIPE, stdout=None, stderr=None)
+
+def close_ssh(sshproc):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: closing SSH control session")
+    return sshproc.communicate("exit\n")
+
+def cmd_ssh(cmd):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    command = ["ssh", '-oControlMaster=no' , controlpath, args.device]
+    command.extend(cmd)
+    if args.verbose:
+        print("INFO: running command '{}'".format(' '.join(cmd)))
+    return check_output(command)
+
+# Open SSH connection
+sshproc = open_ssh()
+
+output = cmd_ssh(["lsfcmap", "-nohdr", "-delim", ":"])
+fields = ['id', 'name', 'source_vdisk_id', 'source_vdisk_name',
+          'target_vdisk_id', 'target_vdisk_name', 'group_id', 'group_name',
+          'status', 'progress', 'copy_rate', 'clean_progress', 'incremental',
+          'partner_FC_id', 'partner_FC_name', 'restoring', 'start_time',
+          'rc_controlled']
+detailed = ['id', 'name', 'source_vdisk_id', 'source_vdisk_name',
+            'target_vdisk_id', 'target_vdisk_name', 'group_id', 'group_name',
+            'status', 'progress', 'copy_rate', 'start_time',
+            'dependent_mappings', 'autodelete', 'clean_progress', 'clean_rate',
+            'incremental', 'difference', 'grain_size', 'IO_group_id',
+            'IO_group_name', 'partner_FC_id', 'partner_FC_name', 'restoring',
+            'rc_controlled']
+
+print(":".join(detailed))
+
+for line in output.split():
+    mapping = dict(zip(fields, line.split(':')))
+    details = cmd_ssh(["lsfcmap", "-nohdr", "-delim", ":", mapping["id"]])
+    fcmap = ":".join(details.splitlines())
+    print(fcmap)
+
+close_ssh(sshproc)
