@@ -1,0 +1,59 @@
+#!/usr/bin/python2.7
+#
+# List all FlashCopy mappings parameters
+from __future__ import print_function
+import sys
+from subprocess import check_output, Popen, PIPE
+
+
+# Parsing arguments
+import argparse
+parser = argparse.ArgumentParser(description='List all mappings with all parameters')
+parser.add_argument('device', metavar='DEVICE',
+               help='Hostname of the storage cluster')
+parser.add_argument('--version', action='version', version='%(prog)s dev')
+parser.add_argument('-v', '--verbose', default=False, action='store_true',
+               help='print verbose output')
+args = parser.parse_args()
+
+def open_ssh():
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: opening SSH control session")
+    return Popen(['ssh', '-T', '-oControlMaster=yes', controlpath, args.device], stdin=PIPE, stdout=None, stderr=None)
+
+def close_ssh(sshproc):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: closing SSH control session")
+    return sshproc.communicate("exit\n")
+
+def cmd_ssh(cmd):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    command = ["ssh", '-oControlMaster=no' , controlpath, args.device]
+    command.extend(cmd)
+    if args.verbose:
+        print("INFO: running command '{}'".format(' '.join(cmd)))
+    return check_output(command)
+
+# Open SSH connection
+sshproc = open_ssh()
+
+output = cmd_ssh(["lshostvdiskmap", "-nohdr", "-delim", ":"])
+fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid',
+          'io_group_id', 'io_group_name']
+
+mappings = {}
+for line in output.split():
+    mapping = line.split(':')
+    mapid = mapping[3] + ',' + mapping[0]
+    if mapid in mappings and \
+       mappings[mapid][2] not in mapping[2].split(','):
+        mapping[2] = mappings[mapid][2] + ',' + mapping[2]
+    mappings.update({mapid: mapping})
+
+print(":".join(fields))
+for mapid in sorted(mappings.keys()):
+    print(":".join(mappings[mapid]))
+
+close_ssh(sshproc)
