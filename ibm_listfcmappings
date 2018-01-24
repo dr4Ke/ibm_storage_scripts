@@ -8,10 +8,10 @@ from subprocess import check_output, Popen, PIPE
 
 # Parsing arguments
 import argparse
-parser = argparse.ArgumentParser(description='List all mappings with all parameters')
+parser = argparse.ArgumentParser(description='List all FlashCopy mappings with all parameters')
 parser.add_argument('device', metavar='DEVICE',
                help='Hostname of the storage cluster')
-parser.add_argument('--version', action='version', version='%(prog)s 1.0')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1')
 parser.add_argument('-v', '--verbose', default=False, action='store_true',
                help='print verbose output')
 args = parser.parse_args()
@@ -39,21 +39,26 @@ def cmd_ssh(cmd):
 # Open SSH connection
 sshproc = open_ssh()
 
-output = cmd_ssh(["lshostvdiskmap", "-nohdr", "-delim", ":"])
-fields = ['host_id', 'host_name', 'scsi_id', 'vdisk_id', 'vdisk_name', 'vdisk_uid',
-          'io_group_id', 'io_group_name']
+output = cmd_ssh(["lsfcmap", "-nohdr", "-delim", ":"])
+fields = ['id', 'name', 'source_vdisk_id', 'source_vdisk_name',
+          'target_vdisk_id', 'target_vdisk_name', 'group_id', 'group_name',
+          'status', 'progress', 'copy_rate', 'clean_progress', 'incremental',
+          'partner_FC_id', 'partner_FC_name', 'restoring', 'start_time',
+          'rc_controlled']
+detailed = ['id', 'name', 'source_vdisk_id', 'source_vdisk_name',
+            'target_vdisk_id', 'target_vdisk_name', 'group_id', 'group_name',
+            'status', 'progress', 'copy_rate', 'start_time',
+            'dependent_mappings', 'autodelete', 'clean_progress', 'clean_rate',
+            'incremental', 'difference', 'grain_size', 'IO_group_id',
+            'IO_group_name', 'partner_FC_id', 'partner_FC_name', 'restoring',
+            'rc_controlled']
 
-mappings = {}
+print(":".join(detailed))
+
 for line in output.split():
-    mapping = line.split(':')
-    mapid = mapping[3] + ',' + mapping[0]
-    if mapid in mappings and \
-       mappings[mapid][2] not in mapping[2].split(','):
-        mapping[2] = mappings[mapid][2] + ',' + mapping[2]
-    mappings.update({mapid: mapping})
-
-print(":".join(fields))
-for mapid in sorted(mappings.keys()):
-    print(":".join(mappings[mapid]))
+    mapping = dict(zip(fields, line.split(':')))
+    details = cmd_ssh(["lsfcmap", "-nohdr", "-delim", ":", mapping["id"]])
+    fcmap = ":".join(details.splitlines())
+    print(fcmap)
 
 close_ssh(sshproc)
