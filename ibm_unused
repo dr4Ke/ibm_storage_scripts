@@ -12,7 +12,7 @@ import argparse
 parser = argparse.ArgumentParser(description='List all unused objects')
 parser.add_argument('device', metavar='DEVICE',
                help='Hostname of the storage cluster')
-parser.add_argument('--version', action='version', version='%(prog)s 0.1')
+parser.add_argument('--version', action='version', version='%(prog)s 1.0')
 parser.add_argument('-v', '--verbose', default=False, action='store_true',
                help='print verbose output')
 parser.add_argument('--type', metavar='TYPE', default='all',
