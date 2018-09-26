@@ -1,0 +1,151 @@
+#!/usr/bin/python2.7
+#
+# Description: List vdisks with some useful informations
+# Author:      Christophe Drevet-Droguet
+
+from __future__ import print_function
+import sys
+from subprocess import check_output, Popen, PIPE
+import re
+
+
+# Parsing arguments
+import argparse
+parser = argparse.ArgumentParser(description='List vdisks with some useful informations')
+parser.add_argument('device', metavar='DEVICE',
+               help='Hostname of the storage cluster')
+parser.add_argument('--version', action='version', version='%(prog)s dev')
+#actiongrp.add_argument('--clean', default=False, action='store_true',
+#               help='remove all mappings')
+parser.add_argument('--vdisk', default='.*',
+               help='select vdisks with this regex pattern (default: .*)')
+parser.add_argument('--fields',
+               default='id,name,IO_group_name,status,primary_mdisk_name,'
+                       'preferred_node_name,vdisk_UID',
+               help='show selected fields (default: id,name,IO_group_name,\nstatus,'
+                    'primary_mdisk_name,\npreferred_node_name,vdisk_UID)')
+parser.add_argument('-H', '--no-header', dest='header', default=True, action='store_false',
+               help='don\'t print header')
+parser.add_argument('-F', '--separator', default=':',
+               help='use output SEPARATOR (default: :)')
+parser.add_argument('-v', '--verbose', default=False, action='store_true',
+               help='print verbose output')
+args = parser.parse_args()
+
+# Check parameters
+def open_ssh():
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: opening SSH control session", file=sys.stderr)
+    return Popen(['ssh', '-T', '-oControlMaster=yes', controlpath, args.device], stdin=PIPE, stdout=None, stderr=None)
+
+def close_ssh(sshproc):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    if args.verbose:
+        print("INFO: closing SSH control session", file=sys.stderr)
+    return sshproc.communicate("exit\n")
+
+def cmd_ssh(cmd):
+    controlpath = "-oControlPath=~/.ssh/ssh-%r-%h-%p"
+    command = ["ssh", '-oControlMaster=no' , controlpath, args.device]
+    command.extend(cmd)
+    if args.verbose:
+        print("INFO: running command '{}'".format(' '.join(cmd)), file=sys.stderr)
+    return check_output(command)
+
+def get_node_name(node_id):
+    output = cmd_ssh(['lsnode', '-delim', ':', node_id])
+    for line in output.splitlines():
+        if re.match('name:', line):
+            return re.split(':', line)[1]
+    return node_id
+
+# Open SSH connection
+sshproc = open_ssh()
+
+# Get vdisk list
+output = cmd_ssh(["lsvdisk", "-nohdr", "-delim", ":"])
+vdisks = []
+fields = ['id', 'name', 'IO_group_id', 'IO_group_name', 'status',
+          'mdisk_grp_id', 'mdisk_grp_name', 'capacity', 'type',
+          'FC_id', 'FC_name', 'RC_id', 'RC_name', 'vdisk_UID', 'fc_map_count',
+          'copy_count', 'fast_write_state', 'se_copy_count', 'RC_change',
+          'compressed_copy_count', 'parent_mdisk_grp_id', 'parent_mdisk_grp_name']
+for line in output.split():
+    vdisk = dict(zip(fields, line.split(':')))
+    if re.match(args.vdisk, vdisk['name']):
+        vdisks.append(vdisk)
+        if args.verbose:
+            print('INFO: selecting vdisk {}'.format(vdisk['name']), file=sys.stderr)
+    elif args.verbose:
+        print('INFO: ignoring vdisk {}'.format(vdisk['name']), file=sys.stderr)
+
+selected_fields = args.fields.split(',')
+if args.verbose:
+    print('INFO: selected fields: {}'.format(selected_fields), file=sys.stderr)
+if args.header:
+    print(args.separator.join(selected_fields))
+for vdisk in vdisks:
+    output = cmd_ssh(["lsvdisk", "-delim", ":", vdisk['name']])
+    details = {}
+    copy_id = None
+    vdisk_details = {}
+    for line in output.splitlines():
+        if line == '':
+            if copy_id is None:
+                vdisk_details['volume'] = details
+            else:
+                vdisk_details[copy_id] = details
+            details = {}
+            continue
+        var, value = line.split(':', 1)
+        if var == 'copy_id':
+            copy_id = value
+        if var == 'primary' and value == 'yes':
+            vdisk_details['primary'] = copy_id
+        if var not in details:
+            details[var] = value
+        else:
+            details[var] = details[var] + '|' + value
+    vdisk_details[copy_id] = details
+    vdisk_print = []
+    for elt in selected_fields:
+        get_name = False
+        if elt == 'preferred_node_name':
+            elt = 'preferred_node_id'
+            get_name = True
+        if re.match('primary_', elt):
+            elt = re.split('primary_', elt)[1]
+            if elt in vdisk_details[vdisk_details['primary']]:
+                vdisk_print.append(vdisk_details[vdisk_details['primary']][elt])
+            else:
+                vdisk_print.append('')
+            continue
+        if elt in vdisk_details['volume'] \
+          and vdisk_details['volume'][elt] != 'many':
+            vdisk_print.append(vdisk_details['volume'][elt])
+        else:
+            many_values_required = False
+            if elt in vdisk_details['volume'] \
+              and vdisk_details['volume'][elt] == 'many':
+                many_values_required = True
+            many_values = []
+            if elt in vdisk_details[vdisk_details['primary']]:
+                many_values.append(vdisk_details[vdisk_details['primary']][elt])
+            elif many_values_required:
+                many_values.append('')
+            for copy, copy_details in vdisk_details.iteritems():
+                if copy in ['volume', 'primary', vdisk_details['primary']]:
+                    continue
+                if elt in copy_details:
+                    many_values.append(copy_details[elt])
+                elif many_values_required:
+                    many_values.append('')
+            vdisk_print.append(','.join(many_values))
+        if get_name:
+            node_id = vdisk_print.pop()
+            vdisk_print.append(get_node_name(node_id))
+    print(args.separator.join(vdisk_print))
+
+# Close SSH connection
+close_ssh(sshproc)
