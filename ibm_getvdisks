@@ -14,7 +14,7 @@ import argparse
 parser = argparse.ArgumentParser(description='List vdisks with some useful informations')
 parser.add_argument('device', metavar='DEVICE',
                help='Hostname of the storage cluster')
-parser.add_argument('--version', action='version', version='%(prog)s dev')
+parser.add_argument('--version', action='version', version='%(prog)s 1.0')
 #actiongrp.add_argument('--clean', default=False, action='store_true',
 #               help='remove all mappings')
 parser.add_argument('--vdisk', default='.*',
